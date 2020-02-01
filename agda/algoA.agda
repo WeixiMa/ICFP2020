@@ -67,22 +67,22 @@ occurs? x (bind a t) with occurs? x t
 occurs? x (bind a t) | inj₁ y = inj₁ (bind y)
 occurs? x (bind a t) | inj₂ n = inj₂ (bind n)
 
-sublemma₁ : ∀ {x t' t} → not-occurs x t → (make-sub x t') t ≡ t
-sublemma₁ {x} (var {x' = x'} neq) with x ≟ x'
-sublemma₁ {x} (var {x' = x'} neq) | yes p = ⊥-elim (neq p)
-sublemma₁ {x} (var {x' = x'} neq) | no ¬p = refl
-sublemma₁ atom = refl
-sublemma₁ (bind {x} {a} {t} p) = subst (λ hole → bind a hole ≡ bind a t) (sym (sublemma₁ p)) refl
-sublemma₁ (fapp {x} {t₁} {t₂} p₁ p₂) = subst₂ (λ h₁ h₂ → fapp h₁ h₂ ≡ fapp t₁ t₂) (sym (sublemma₁ p₁)) (sym (sublemma₁ p₂)) refl
+occur_sub_lemma : ∀ {x t' t} → not-occurs x t → (make-sub x t') t ≡ t
+occur_sub_lemma {x} (var {x' = x'} neq) with x ≟ x'
+occur_sub_lemma {x} (var {x' = x'} neq) | yes p = ⊥-elim (neq p)
+occur_sub_lemma {x} (var {x' = x'} neq) | no ¬p = refl
+occur_sub_lemma atom = refl
+occur_sub_lemma (bind {x} {a} {t} p) = subst (λ hole → bind a hole ≡ bind a t) (sym (occur_sub_lemma p)) refl
+occur_sub_lemma (fapp {x} {t₁} {t₂} p₁ p₂) = subst₂ (λ h₁ h₂ → fapp h₁ h₂ ≡ fapp t₁ t₂) (sym (occur_sub_lemma p₁)) (sym (occur_sub_lemma p₂)) refl
 
-lemma₁ : ∀ {A B} {f : A → B} {as : List A} {a : A}
+map_lemma : ∀ {A B} {f : A → B} {as : List A} {a : A}
         → a ∈ as → (f a) ∈ (map f as)
-lemma₁ base = base
-lemma₁ (step i) = step (lemma₁ i)
+map_lemma base = base
+map_lemma (step i) = step (map_lemma i)
 
-lemma₂ : ∀ {t₁ t₂ γ ϕ} → γ ⊢ ([] , t₁) =α ([] , t₂) → γ ⊢ (ϕ , t₁) =α (ϕ , t₂)
-lemma₂ {ϕ = []} p = p
-lemma₂ {ϕ = x ∷ ϕ} p = ext (lemma₂ p)
+ext_lemma : ∀ {t₁ t₂ γ ϕ} → γ ⊢ ([] , t₁) =α ([] , t₂) → γ ⊢ (ϕ , t₁) =α (ϕ , t₂)
+ext_lemma {ϕ = []} p = p
+ext_lemma {ϕ = x ∷ ϕ} p = ext (ext_lemma p)
 
 lemma : ∀ {σ : Term → Term} {x t t' γ}
           {sub₂ : ∀ {a t} → bind a (σ t) ≡ σ (bind a t)}
@@ -95,9 +95,9 @@ lemma {σ} {x} {t} {var x'} {γ} p | inj₁ c | yes eq = αsymm (subst (λ hole 
 lemma {σ} {x} {t} {var x'} {γ} p | inj₁ c | no _ = αrefl
 lemma {σ} {x} {t} {fapp t₁ t₂} {γ} {sub₂} {sub₃} p | inj₁ c with lemma {σ} {x} {t} {t₁} {γ} {sub₂} {sub₃} p | lemma {σ} {x} {t} {t₂} {γ} {sub₂} {sub₃}  p
 ... | r₁ | r₂ = subst₂ (λ h₁ h₂ → γ ⊢ ([] , h₁) =α ([] , h₂)) sub₃ sub₃ (fapp r₁ r₂)
-lemma {σ} {x} {t} {bind a t'} {γ} {sub₂} {sub₃} p | inj₁ c with (lemma₂ {ϕ = a ∷ []}(lemma {σ} {x} {t} {t'} {γ} {sub₂} {sub₃} p))
+lemma {σ} {x} {t} {bind a t'} {γ} {sub₂} {sub₃} p | inj₁ c with (ext_lemma {ϕ = a ∷ []}(lemma {σ} {x} {t} {t'} {γ} {sub₂} {sub₃} p))
 ... | r = subst₂ (λ h₁ h₂ → γ ⊢ ([] , h₁) =α ([] , h₂)) sub₂ sub₂ (bind r)
-lemma {σ} {x} {t} {t'} {γ} p | inj₂ n = subst (λ hole → γ ⊢ ([] , σ hole) =α ([] , σ t')) (sym (sublemma₁ n)) αrefl
+lemma {σ} {x} {t} {t'} {γ} p | inj₂ n = subst (λ hole → γ ⊢ ([] , σ hole) =α ([] , σ t')) (sym (occur_sub_lemma n)) αrefl
 
 data _⇒A_ : List Eqn? → List Eqn? → Set where 
      a  : ∀ {ϕ x t e}
@@ -140,17 +140,17 @@ soundness {σ} {γ} {sub₃ = sub} (c3 {ϕ₁} {t₁} {t₂} {ϕ₂} {t₁'} {t�
 soundness c3 h (step i) = h (step (step i))
 soundness {σ} {γ} {sub₁ = sub} (d1 {ϕ₁} {x} {a₁} {ϕ₂} {a₂} eq) h base
   with h base | subst (λ t₂ → γ ⊢ (ϕ₁ , atom a₁) =α (ϕ₂ , t₂)) sub (atom eq)
-... | eq₁ | eq₂ = αtran (lemma₂ (subst (λ t₂ → γ ⊢ ([] , σ (var x)) =α ([] , t₂)) (sym sub) eq₁)) eq₂
+... | eq₁ | eq₂ = αtran (ext_lemma (subst (λ t₂ → γ ⊢ ([] , σ (var x)) =α ([] , t₂)) (sym sub) eq₁)) eq₂
 soundness {σ} {γ} {sub₂ = sub₂} {sub₃ = sub₃} (d1 {x = x} eq) h {ϕ₁} {t₁} {ϕ₂} {t₂} (step i)
-  = (αsymm (αtran (αsymm (αtran (h (step (lemma₁ i))) (lemma₂ (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (lemma₂ (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
+  = (αsymm (αtran (αsymm (αtran (h (step (map_lemma i))) (ext_lemma (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (ext_lemma (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
 soundness {σ} {γ} {sub₂ = sub} (d2 {ϕ₁} {x} {x₁} {a₁} {ϕ₂} {a₂} {t₂} n) h base
   with h base | subst (λ t₂ → γ ⊢ (ϕ₁ , bind a₁ (σ (var x₁))) =α (ϕ₂ , t₂)) sub (bind (h (step base))) 
-... | eq₁ | eq₂ = αtran (lemma₂ (subst (λ t → γ ⊢ ([] , σ (var x)) =α ([] , t)) (sym sub) eq₁)) eq₂
+... | eq₁ | eq₂ = αtran (ext_lemma (subst (λ t → γ ⊢ ([] , σ (var x)) =α ([] , t)) (sym sub) eq₁)) eq₂
 soundness {σ} {γ} {sub₂ = sub₂} {sub₃ = sub₃} (d2 {x = x} x₁) h {t₁ = t₁} {t₂ = t₂} (step i)
-  = (αsymm (αtran (αsymm (αtran (h (step (step (lemma₁ i)))) (lemma₂ (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (lemma₂ (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
+  = (αsymm (αtran (αsymm (αtran (h (step (step (map_lemma i)))) (ext_lemma (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (ext_lemma (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
 soundness {σ} {γ} {sub₃ = sub} (d3 {ϕ₁} {x} {x₁} {x₂} {ϕ₂} {t₁} {t₂}) h base 
   with h base | subst (λ t → γ ⊢ (ϕ₁ , fapp (σ (var x₁)) (σ (var x₂))) =α (ϕ₂ , t)) sub (fapp (h (step base)) (h (step (step base))))
-... | eq₁ | eq₂  = αtran (lemma₂ (subst (λ t → γ ⊢ ([] , σ (var x)) =α ([] , t)) (sym sub) eq₁)) eq₂
+... | eq₁ | eq₂  = αtran (ext_lemma (subst (λ t → γ ⊢ ([] , σ (var x)) =α ([] , t)) (sym sub) eq₁)) eq₂
 soundness {σ} {γ} {sub₂ = sub₂} {sub₃ = sub₃} (d3 {x = x} {e = e}) h {ϕ₁} {t₁} {ϕ₂} {t₂} (step i)
-  = (αsymm (αtran (αsymm (αtran (h (step (step (step (lemma₁ i))))) (lemma₂ (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (lemma₂ (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
+  = (αsymm (αtran (αsymm (αtran (h (step (step (step (map_lemma i))))) (ext_lemma (lemma {σ = σ} {t' = t₂} {sub₂ = sub₂} {sub₃ = sub₃} (h base))))) (ext_lemma (lemma {σ = σ} {t' = t₁} {sub₂ = sub₂} {sub₃ = sub₃} (h base)))))
 
