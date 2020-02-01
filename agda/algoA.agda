@@ -1,13 +1,50 @@
-module algoA where
-
 open import Data.Nat
 open import Data.Product hiding (map)
 open import Data.Sum hiding (map)
 open import Data.List
 open import Data.Empty
-open import Relation.Nullary 
+open import Relation.Nullary  hiding (¬_)
 open import Relation.Binary.PropositionalEquality
+open import refutation
 open import defs
+
+module algoA
+  (vext : ∀ {x₁ ϕ₁ x₂ ϕ₂ γ a}
+          → γ ⊢ (ϕ₁ , var x₁) =α (ϕ₂ , var x₂)
+          → γ ⊢ (ϕ₁ ++ (a ∷ []), var x₁) =α (ϕ₂ ++ (a ∷ []), var x₂))
+  where
+
+
+free_ext₁ : ∀ {a a' l} → a ∉ l → ¬ a ≡ a' → a ∉ (l ++ a' ∷ [])
+free_ext₁ {l = []} base p2 = step p2 base
+free_ext₁ {l = x ∷ l} (step neq p1) p2 = step neq (free_ext₁ p1 p2)
+
+free_ext₂ : ∀ {a a' l} → a ∉ l → a ≡ a' → dB (l ++ a' ∷ []) a 0
+free_ext₂ {l = []} p1 p2 = base p2
+free_ext₂ {l = x ∷ l} (step x₁ p1) p2 = step x₁ (free_ext₂ p1 p2)
+
+suc_length : ∀ {A : Set} {a : A} {l : List A} → length (l ++ a ∷ []) ≡ suc (length l)
+suc_length {l = []} = refl
+suc_length {a = a} {l = x ∷ l} = cong suc (suc_length {a = a} {l = l})
+
+bound_ext : ∀ {a a' l ℓ} → dB l a ℓ → dB (l ++ a' ∷ []) a (suc ℓ)
+bound_ext {l = x ∷ []} (base eq) = base eq
+bound_ext {a = a} {a' = a'} {l = x ∷ l@(_ ∷ _)} p@(base refl) = subst (λ ℓ → dB ((x ∷ l) ++ a' ∷ []) x ℓ) (suc_length {a = a'} {l = l}) (base {a = a}{ϕ = l ++ a' ∷ []} refl)
+bound_ext {a' = a'} {l = x ∷ x₁ ∷ l} (step neq p) = step neq (bound_ext {a' = a'} p)
+
+ext : ∀ {t₁ t₂ ϕ₁ ϕ₂ γ a}
+      → γ ⊢ (ϕ₁ , t₁) =α (ϕ₂ , t₂)
+      → γ ⊢ (ϕ₁ ++ (a ∷ []) , t₁) =α (ϕ₂ ++ (a ∷ []) , t₂)
+ext (var x) = vext (var x)
+ext vrefl = vrefl
+ext (vsymm p) = vsymm (ext p)
+ext (vtran p₁ p₂) = vtran (ext p₁) (ext p₂)
+ext {a = a'} (atom {a₁ = a} (free f₁ f₂)) with a ≟ a'
+ext {a = a'} (atom {a} (free {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} f₁ f₂)) | yes eq = atom (bound {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (suc_length {a = a'} {l = ϕ₁})) (sym (suc_length {a = a'} {l = ϕ₂})) (cong suc same_len)} (free_ext₂ f₁ eq) (free_ext₂ f₂ eq))
+ext {a = a'} (atom {a} (free {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} f₁ f₂)) | no ¬p = atom (free {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (suc_length {a = a'} {l = ϕ₁})) (sym (suc_length {a = a'} {l = ϕ₂})) (cong suc same_len)} (free_ext₁ f₁ (neg→neg ¬p)) (free_ext₁ f₂ (neg→neg ¬p)))
+ext {a = a'} (atom (bound {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} b₁ b₂)) = atom (bound {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (suc_length {a = a'} {l = ϕ₁})) (sym (suc_length {a = a'} {l = ϕ₂})) (cong suc same_len)} (bound_ext b₁) (bound_ext b₂))
+ext (bind p) = bind (ext p)
+ext (fapp p₁ p₂) = fapp (ext p₁) (ext p₂)
 
 Sub = Term → Term
 record Eqn? : Set where
@@ -56,7 +93,7 @@ data occurs : Var → Term → Set where
 occurs? : (x : Var) → (t : Term) →  (occurs x t) ⊎ (not-occurs x t)
 occurs? x (var x') with x ≟ x'
 occurs? x (var x') | yes p = inj₁ (var p)
-occurs? x (var x') | no ¬p = inj₂ (var ¬p)
+occurs? x (var x') | no ¬p = inj₂ (var (neg→neg ¬p))
 occurs? x (fapp t₁ t₂) with occurs? x t₁ | occurs? x t₂
 occurs? x (fapp t₁ t₂) | inj₁ y₁ | inj₁ y₂  = inj₁ (fapp₁ y₁)
 occurs? x (fapp t₁ t₂) | inj₁ y | inj₂ n = inj₁ (fapp₁ y)
@@ -69,7 +106,7 @@ occurs? x (bind a t) | inj₂ n = inj₂ (bind n)
 
 occur_sub_lemma : ∀ {x t' t} → not-occurs x t → (make-sub x t') t ≡ t
 occur_sub_lemma {x} (var {x' = x'} neq) with x ≟ x'
-occur_sub_lemma {x} (var {x' = x'} neq) | yes p = ⊥-elim (neq p)
+occur_sub_lemma {x} (var {x' = x'} neq) | yes p = refutation-elim (neq p)
 occur_sub_lemma {x} (var {x' = x'} neq) | no ¬p = refl
 occur_sub_lemma atom = refl
 occur_sub_lemma (bind {x} {a} {t} p) = subst (λ hole → bind a hole ≡ bind a t) (sym (occur_sub_lemma p)) refl

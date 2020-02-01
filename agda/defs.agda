@@ -1,4 +1,3 @@
-{-# OPTIONS --allow-unsolved-metas #-}
 module defs where
 
 open import Data.Nat
@@ -6,8 +5,9 @@ open import Data.List
 open import Data.Sum
 open import Data.Product
 open import Data.Empty
-open import Relation.Nullary
+open import Relation.Nullary hiding (¬_)
 open import Relation.Binary.PropositionalEquality
+open import refutation
 
 ------------------------------------
 -- Unification terms ---------------
@@ -61,9 +61,26 @@ bound? [] a = inj₁ base
 bound? (a' ∷ ϕ) a with a ≟ a'
 bound? (a' ∷ ϕ) a | yes p = inj₂ (length ϕ , base p)
 bound? (a' ∷ ϕ) a | no ¬p with bound? ϕ a
-bound? (a' ∷ ϕ) a | no ¬p | inj₁ f = inj₁ (step ¬p f)
-bound? (a' ∷ ϕ) a | no ¬p | inj₂ (ℓ , b) = inj₂ (ℓ , step ¬p b)
+bound? (a' ∷ ϕ) a | no ¬p | inj₁ f = inj₁ (step (neg→neg ¬p) f)
+bound? (a' ∷ ϕ) a | no ¬p | inj₂ (ℓ , b) = inj₂ (ℓ , step (neg→neg ¬p) b)
 
+unique-free : ∀ {ϕ a} → (x : a ∉ ϕ) → (y : a ∉ ϕ) → x ≡ y
+unique-free base base = refl
+unique-free (step neq₁ p₁) (step neq₂ p₂) with unique-free p₁ p₂ | refutations-unique neq₁ neq₂
+unique-free (step neq₁ p₁) (step .neq₁ .p₁) | refl | refl = refl
+
+unique-bound : ∀ {ϕ a ℓ ℓ'} → (x : dB ϕ a ℓ) → (y : dB ϕ a ℓ')
+               → Σ (ℓ ≡ ℓ') (λ eq → (subst (λ ℓ → dB ϕ a ℓ) eq x) ≡ y)
+unique-bound (base refl) (base refl) = refl , refl
+unique-bound (base eq) (step neq _) = refutation-elim (neq eq)
+unique-bound (step neq _) (base eq) = refutation-elim (neq eq)
+unique-bound (step neq₁ b₁) (step neq₂ b₂) with refutations-unique neq₁ neq₂ | unique-bound b₁ b₂
+unique-bound (step neq₁ b₁) (step .neq₁ .b₁) | refl | refl , refl = refl , refl
+
+free-bound-dec : ∀ {ϕ a ℓ} → dB ϕ a ℓ → a ∉ ϕ → ⊥
+free-bound-dec {[]} () f
+free-bound-dec {a ∷ ϕ} (base eq) (step neq _) = refutation-elim (neq eq)
+free-bound-dec {a ∷ ϕ} (step neq b) (step neq f) = free-bound-dec b f
 ------------------------------------
 -- α-equivalence -------------------
 ------------------------------------
@@ -78,9 +95,6 @@ data _⊢_=α_ : List VEqn → Closure → Closure → Set where
   var : ∀ {x₁ x₂ ϕ₁ ϕ₂ γ}
         → ((ϕ₁ , x₁) =α (ϕ₂ , x₂)) ∈ γ
         → γ ⊢ (ϕ₁ , var x₁) =α (ϕ₂ , var x₂)
-  vext : ∀ {x₁ ϕ₁ x₂ ϕ₂ γ a}
-          → γ ⊢ (ϕ₁ , var x₁) =α (ϕ₂ , var x₂)
-          → γ ⊢ (ϕ₁ ++ (a ∷ []), var x₁) =α (ϕ₂ ++ (a ∷ []), var x₂)
   vrefl : ∀ {x ϕ γ}
           → γ ⊢ (ϕ , var x) =α (ϕ , var x)
   vsymm : ∀ {x₁ x₂ ϕ₁ ϕ₂ γ}
@@ -101,67 +115,32 @@ data _⊢_=α_ : List VEqn → Closure → Closure → Set where
          → γ ⊢ (ϕ₁ , t₂) =α (ϕ₂ , t₂')
          → γ ⊢ (ϕ₁ , fapp t₁ t₂) =α (ϕ₂ , fapp t₁' t₂')
 
-lemma₁ : ∀ {a a' l} → a ∉ l → ¬ a ≡ a' → a ∉ (l ++ a' ∷ [])
-lemma₁ {l = []} base p2 = step p2 base
-lemma₁ {l = x ∷ l} (step neq p1) p2 = step neq (lemma₁ p1 p2)
-
-lemma₂ : ∀ {a a' l} → a ∉ l → a ≡ a' → dB (l ++ a' ∷ []) a 0
-lemma₂ {l = []} p1 p2 = base p2
-lemma₂ {l = x ∷ l} (step x₁ p1) p2 = step x₁ (lemma₂ p1 p2)
-
-le : ∀ {A : Set} {a : A} {l : List A} → length (l ++ a ∷ []) ≡ suc (length l)
-le {l = []} = refl
-le {a = a} {l = x ∷ l} = cong suc (le {a = a}{l = l})
-
-lemma₃ : ∀ {a a' l ℓ} → dB l a ℓ → dB (l ++ a' ∷ []) a (suc ℓ)
-lemma₃ {l = x ∷ []} (base eq) = base eq
-lemma₃ {a = a} {a' = a'} {l = x ∷ l@(_ ∷ _)} p@(base refl) = subst (λ ℓ → dB ((x ∷ l) ++ a' ∷ []) x ℓ) (le {a = a'} {l = l}) (base {a = a}{ϕ = l ++ a' ∷ []} refl)
-lemma₃ {a' = a'} {l = x ∷ x₁ ∷ l} (step neq p) = step neq (lemma₃ {a' = a'} p)
-
-ext : ∀ {t₁ t₂ ϕ₁ ϕ₂ γ a}
-      → γ ⊢ (ϕ₁ , t₁) =α (ϕ₂ , t₂)
-      → γ ⊢ (ϕ₁ ++ (a ∷ []) , t₁) =α (ϕ₂ ++ (a ∷ []) , t₂)
-ext (var x) = vext (var x)
-ext (vext p) = vext (ext p)
-ext vrefl = vrefl
-ext (vsymm p) = vsymm (ext p)
-ext (vtran p₁ p₂) = vtran (ext p₁) (ext p₂)
-ext {a = a'} (atom {a₁ = a} (free f₁ f₂)) with a ≟ a'
-ext {a = a'} (atom {a} (free {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} f₁ f₂)) | yes eq = atom (bound {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (le {a = a'} {l = ϕ₁})) (sym (le {a = a'} {l = ϕ₂})) (cong suc same_len)} (lemma₂ f₁ eq) (lemma₂ f₂ eq))
-ext {a = a'} (atom {a} (free {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} f₁ f₂)) | no ¬p = atom (free {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (le {a = a'} {l = ϕ₁})) (sym (le {a = a'} {l = ϕ₂})) (cong suc same_len)} (lemma₁ f₁ ¬p) (lemma₁ f₂ ¬p))
-ext {a = a'} (atom (bound {ϕ₁ = ϕ₁} {ϕ₂ = ϕ₂} {same_len = same_len} b₁ b₂)) = atom (bound {same_len = subst₂ (λ h₁ h₂ → h₁ ≡ h₂) (sym (le {a = a'} {l = ϕ₁})) (sym (le {a = a'} {l = ϕ₂})) (cong suc same_len)} (lemma₃ b₁) (lemma₃ b₂))
-ext (bind p) = bind (ext p)
-ext (fapp p₁ p₂) = fapp (ext p₁) (ext p₂)
-
 αtran : ∀ {ϕ₁ ϕ₂ t₁ t₂ ϕ' t' γ}
         → γ ⊢ (ϕ₁ , t₁) =α (ϕ' , t')
         → γ ⊢ (ϕ' , t') =α (ϕ₂ , t₂)
         → γ ⊢ (ϕ₁ , t₁) =α (ϕ₂ , t₂)
 αtran (var x) (var x₁) = vtran (var x) (var x₁)
-αtran (var x) (vext p2) = vtran (var x) (vext p2)
 αtran (var x) vrefl = var x
 αtran (var x) (vsymm p2) = vtran (var x) (vsymm p2)
 αtran (var x) (vtran p2 p3) = vtran (αtran (var x) p2) p3
-αtran p1@(vext _) p2 = {!!}
 αtran vrefl (var x) = var x
-αtran vrefl (vext p2) = vext p2
 αtran vrefl vrefl = vrefl
 αtran vrefl (vsymm p2) = vsymm p2
 αtran vrefl (vtran p2 p3) = αtran p2 p3
 αtran (vsymm p1) (var x) = vtran (vsymm p1) (var x)
-αtran (vsymm p1) (vext p2) = vtran (vsymm p1) (vext p2)
 αtran (vsymm p1) vrefl = vsymm p1
 αtran (vsymm p1) (vsymm p2) = vsymm (αtran p2 p1)
 αtran (vsymm p1) (vtran p2 p3) = vtran (αtran (vsymm p1) p2) p3
 αtran (vtran p1 p3) (var x) = vtran (αtran p1 p3) (var x)
-αtran (vtran p1 p3) (vext p2) = vtran (αtran p1 p3) (vext p2)
 αtran (vtran p1 p3) vrefl = αtran p1 p3
 αtran (vtran p1 p3) (vsymm p2) = vtran (αtran p1 p3) (vsymm p2)
 αtran (vtran p1 p3) (vtran p2 p4) = vtran (αtran p1 p3) (αtran p2 p4)
-αtran (atom (free x x₁)) (atom (free x₂ x₃)) = {!!}
-αtran (atom (free x x₁)) (atom (bound x₂ x₃)) = {!!}
-αtran (atom (bound x x₁)) (atom (free x₂ x₃)) = {!!}
-αtran (atom (bound x x₁)) (atom (bound x₂ x₃)) = {!!}
+αtran (atom (free f₁ f₂)) (atom (free f₃ f₄)) with unique-free f₂ f₃
+αtran (atom (free {same_len = same_len₁} f₁ f₂)) (atom (free {same_len = same_len₂} .f₂ f₄)) | refl = atom (free {same_len = trans same_len₁ same_len₂} f₁ f₄)
+αtran (atom (free _ f)) (atom (bound b _)) = ⊥-elim (free-bound-dec b f)
+αtran (atom (bound _ b)) (atom (free f _)) = ⊥-elim (free-bound-dec b f)
+αtran (atom (bound b₁ b₂)) (atom (bound b₃ b₄)) with unique-bound b₂ b₃
+αtran (atom (bound {same_len = same_len₁} b₁ b₂)) (atom (bound {same_len = same_len₂} .b₂ b₄)) | refl , refl = atom (bound {same_len = trans same_len₁ same_len₂} b₁ b₄)
 αtran (bind p1) (bind p2) = bind (αtran p1 p2)
 αtran (fapp p1 p3) (fapp p2 p4) = fapp (αtran p1 p2) (αtran p3 p4)
 
@@ -169,7 +148,6 @@ ext (fapp p₁ p₂) = fapp (ext p₁) (ext p₂)
         → γ ⊢ (ϕ₁ , t₁) =α (ϕ₂ , t₂)
         → γ ⊢ (ϕ₂ , t₂) =α (ϕ₁ , t₁)
 αsymm (var x) = vsymm (var x)
-αsymm (vext p) = vext (αsymm p)
 αsymm vrefl = vrefl
 αsymm (vsymm p) = p
 αsymm (vtran p p₁) = vtran (αsymm p₁) (αsymm p)
