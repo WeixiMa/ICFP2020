@@ -5,16 +5,16 @@ open import Data.List
 open import Data.Empty
 open import Relation.Nullary  hiding (¬_)
 open import Relation.Binary.PropositionalEquality
-open import Relation.Binary
 open import refutation
 open import defs
+open import snoc
+open import wellfounded
 
 module algoA
   (vext : ∀ {x₁ ϕ₁ x₂ ϕ₂ γ a}
           → γ ⊢ (ϕ₁ , var x₁) =α (ϕ₂ , var x₂)
           → γ ⊢ (ϕ₁ ++ (a ∷ []), var x₁) =α (ϕ₂ ++ (a ∷ []), var x₂))
   where
-
 
 free_ext₁ : ∀ {a a' l} → a ∉ l → ¬ a ≡ a' → a ∉ (l ++ a' ∷ [])
 free_ext₁ {l = []} base p2 = step p2 base
@@ -91,7 +91,7 @@ data occurs : Var → Term → Set where
   fapp₂ : ∀ {x t₁ t₂}
         → occurs x t₂
         → occurs x (fapp t₁ t₂)
-occurs? : (x : Var) → (t : Term) →  (occurs x t) ⊎ (not-occurs x t)
+occurs? : (x : Var) → (t : Term) → (occurs x t) ⊎ (not-occurs x t)
 occurs? x (var x') with x ≟ x'
 occurs? x (var x') | yes p = inj₁ (var p)
 occurs? x (var x') | no ¬p = inj₂ (var (neg→neg ¬p))
@@ -117,28 +117,6 @@ map_lemma : ∀ {A B} {f : A → B} {as : List A} {a : A}
         → a ∈ as → (f a) ∈ (map f as)
 map_lemma base = base
 map_lemma (step i) = step (map_lemma i)
-
-data SnocView {A : Set} : List A → Set where
-  nil : SnocView []
-  snoc : ∀ (xs : List A) → (x : A)
-         → SnocView (xs ++ (x ∷ []))
-view : ∀ {A} → (xs : List A) → SnocView xs
-view [] = nil
-view (x ∷ xs) with view xs
-view (x ∷ .[]) | nil = snoc [] x
-view (x ∷ .(xs ++ x' ∷ [])) | snoc xs x' = snoc (x ∷ xs) x'
-         
-data Acc {ℓ} {A : Set ℓ} (_<_ : Rel A ℓ) (x : A) : Set ℓ where
-  acc : (∀ y → y < x → Acc _<_ y) → Acc _<_ x
-
-mutual
-  ℕ-allgood' : (n y : ℕ) → y <′ n → Acc _<′_ y
-  ℕ-allgood' zero y ()
-  ℕ-allgood' (suc n) .n ≤′-refl = ℕ-allgood n
-  ℕ-allgood' (suc n) y (≤′-step y<'n) = ℕ-allgood' n y y<'n
-
-  ℕ-allgood : (n : ℕ) → Acc _<′_ n
-  ℕ-allgood n = acc (ℕ-allgood' n)
 
 x≤x : ∀ {x} → x ≤ x
 x≤x {zero} = z≤n
